@@ -4,10 +4,26 @@ server:
 spring:
   application:
     name: api-gateway
+  cloud:
+    nacos:
+      discovery:
+        # 服务发现接线（rcp-contracts/docs/DISCOVERY.md）：占位符默认值命中部署侧
+        # Service 名（compose 服务名与 K8s Service 名均为 nacos），部署侧无需注入。
+        server-addr: ${NACOS_SERVER:nacos:8848}
+        namespace: ${NACOS_NAMESPACE:risk-control}
+        group: ${NACOS_GROUP:DEFAULT_GROUP}
 
 patrol:
   routes:
-    # 巡查线服务地址（本地默认；K8s 中由环境变量覆盖为集群内 Service DNS）
+    # 巡查线服务发现注册名（主路径）：经 Nacos 按名解析实例，多实例轮转。
+    # 注册名真源：rcp-contracts/registry/services.yaml 的 services[].name。
+    services:
+      content: content-patrol
+      message: message-patrol
+      account: account-patrol
+      fund: fund-patrol
+    # 兜底地址：注册中心不可用或无实例时使用（本地开发无 compose 时即走这里）。
+    # 过渡期部署侧可经 PATROL_ROUTES_ENDPOINTS_* 覆盖；discovery 接入完成后部署侧不再注入。
     endpoints:
       content: http://localhost:8081
       message: http://localhost:8082
