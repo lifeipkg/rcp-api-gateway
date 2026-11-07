@@ -19,7 +19,7 @@ public class PatrolRoutesProperties {
 
     private Map<String, String> endpoints = new HashMap<>();
 
-    /** domain -> 服务发现注册名。真源：rcp-contracts/registry/services.yaml 的 services[].name。 */
+    /** domain -> 服务发现注册名。真源：rcp-ontology/ontology/abox/services.ttl 的 rcp:Service 个体。 */
     private Map<String, String> services = new HashMap<>();
 
     public PatrolRoutesProperties() {
