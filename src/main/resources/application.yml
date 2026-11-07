@@ -16,7 +16,7 @@ spring:
 patrol:
   routes:
     # 巡查线服务发现注册名（主路径）：经 Nacos 按名解析实例，多实例轮转。
-    # 注册名真源：rcp-contracts/registry/services.yaml 的 services[].name。
+    # 注册名真源：rcp-ontology/ontology/abox/services.ttl 的 rcp:Service 个体。
     services:
       content: content-patrol
       message: message-patrol
