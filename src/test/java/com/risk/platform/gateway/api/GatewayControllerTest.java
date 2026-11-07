@@ -20,7 +20,12 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = "spring.cloud.nacos.discovery.enabled=false")
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties = {
+                "spring.cloud.nacos.discovery.enabled=false",
+                // 本用例只测派发编排；鉴权链路由 AuthFilterTest 覆盖
+                "iam.auth.enabled=false"
+        })
 class GatewayControllerTest {
 
     @LocalServerPort
