@@ -22,18 +22,15 @@ type Settings struct {
 	PublicPaths []string
 }
 
-// 受控路由 → 所需权限。新增受控路由只改这里，不在 handler 里散着判。
-const (
-	patrolDispatchPath       = "/api/v1/patrol/dispatch"
-	patrolDispatchPermission = "patrol:dispatch"
-)
-
-// Middleware 是统一鉴权：令牌 → IAM 内省 → 权限判定。
+// Middleware 是统一鉴权：令牌 → IAM 内省 → 放行。
 //
 // 三条硬规则：
 //  1. fail closed——令牌缺失/无效、IAM 不可用，统统拒绝。鉴权链路上没有"降级放行"。
-//  2. 网关不解析令牌、不存角色表：权限以 IAM 返回的 permissions 为准。
+//  2. 网关不解析令牌、不存角色表：令牌有效性以 IAM 内省结果为准。
 //  3. /api/v1/iam/** 不在此处鉴权：登录、内省、用户管理由 IAM 自己校验，网关只透传。
+//
+// 当前没有需要按权限细分的受控路由，故只判令牌有效性。新增受控路由时，
+// 在这里加「路由 → 权限」映射，不要在 handler 里散着判。
 func Middleware(introspector Introspector, settings Settings) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if !settings.AuthEnabled {
@@ -72,12 +69,6 @@ func Middleware(introspector Introspector, settings Settings) gin.HandlerFunc {
 			return
 		}
 
-		required := requiredPermission(c.Request.Method, path)
-		if required != "" && !introspection.Has(required) {
-			reject(c, http.StatusForbidden, "FORBIDDEN", "缺少权限: "+required)
-			return
-		}
-
 		c.Set("iam.userId", introspection.UserID)
 		c.Set("iam.username", introspection.Username)
 		c.Set("iam.role", introspection.Role)
@@ -95,14 +86,7 @@ func bearerToken(header string) string {
 	return strings.TrimSpace(header[len(scheme):])
 }
 
-func requiredPermission(method, path string) string {
-	if method == http.MethodPost && path == patrolDispatchPath {
-		return patrolDispatchPermission
-	}
-	return ""
-}
-
-// isPublic 判定公开路径：支持精确匹配与 "/**" 尾部通配（与 Java 版 AntPathMatcher 对齐）。
+// isPublic 判定公开路径：支持精确匹配与 "/**" 尾部通配。
 func isPublic(patterns []string, path string) bool {
 	for _, pattern := range patterns {
 		if strings.HasSuffix(pattern, "/**") {
