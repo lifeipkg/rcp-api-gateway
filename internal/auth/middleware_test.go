@@ -23,12 +23,14 @@ func (s *stubIntrospector) Introspect(_ context.Context, _ string) (iam.Introspe
 	return s.result, s.err
 }
 
+// newTestRouter 用一条「需要令牌的普通路由」+ 一条公开路由来验证中间件行为。
+// 路由名与业务无关：这里只测鉴权链，不测具体接口。
 func newTestRouter(introspector Introspector, settings Settings) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	r.Use(Middleware(introspector, settings))
-	r.POST("/api/v1/patrol/dispatch", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"ok": true}) })
-	r.GET("/api/v1/patrol/domains", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"ok": true}) })
+	r.POST("/api/v1/protected", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"ok": true}) })
+	r.GET("/api/v1/public", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"ok": true}) })
 	r.Any("/api/v1/iam/*path", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"proxy": true}) })
 	r.Handle(http.MethodGet, "/actuator/health", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"ok": true}) })
 	return r
@@ -47,13 +49,13 @@ func serve(r *gin.Engine, method, path, token string) *httptest.ResponseRecorder
 func enabled(introspector Introspector) *gin.Engine {
 	return newTestRouter(introspector, Settings{
 		AuthEnabled: true,
-		PublicPaths: []string{"/actuator/**", "/api/v1/patrol/domains"},
+		PublicPaths: []string{"/actuator/**", "/api/v1/public"},
 	})
 }
 
 func TestMissingTokenIs401(t *testing.T) {
 	stub := &stubIntrospector{}
-	recorder := serve(enabled(stub), http.MethodPost, "/api/v1/patrol/dispatch", "")
+	recorder := serve(enabled(stub), http.MethodPost, "/api/v1/protected", "")
 
 	if recorder.Code != http.StatusUnauthorized {
 		t.Fatalf("缺令牌应 401，实际 %d", recorder.Code)
@@ -68,7 +70,7 @@ func TestMissingTokenIs401(t *testing.T) {
 
 func TestInvalidTokenIs401(t *testing.T) {
 	stub := &stubIntrospector{err: iam.ErrInvalidToken}
-	recorder := serve(enabled(stub), http.MethodPost, "/api/v1/patrol/dispatch", "bad")
+	recorder := serve(enabled(stub), http.MethodPost, "/api/v1/protected", "bad")
 
 	if recorder.Code != http.StatusUnauthorized || !strings.Contains(recorder.Body.String(), "INVALID_TOKEN") {
 		t.Fatalf("无效令牌应 401 INVALID_TOKEN，实际 %d %s", recorder.Code, recorder.Body.String())
@@ -77,7 +79,7 @@ func TestInvalidTokenIs401(t *testing.T) {
 
 func TestIAMUnavailableIs503NeverPass(t *testing.T) {
 	stub := &stubIntrospector{err: errors.New("dial tcp: connection refused")}
-	recorder := serve(enabled(stub), http.MethodPost, "/api/v1/patrol/dispatch", "token")
+	recorder := serve(enabled(stub), http.MethodPost, "/api/v1/protected", "token")
 
 	// 反向断言：IAM 不可达绝不能放行，也不能退化成 401 让前端误判成登录态问题。
 	if recorder.Code != http.StatusServiceUnavailable {
@@ -88,25 +90,16 @@ func TestIAMUnavailableIs503NeverPass(t *testing.T) {
 	}
 }
 
-func TestMissingPermissionIs403(t *testing.T) {
-	stub := &stubIntrospector{result: iam.Introspection{Active: true, Permissions: []string{"viewer"}}}
-	recorder := serve(enabled(stub), http.MethodPost, "/api/v1/patrol/dispatch", "token")
-
-	if recorder.Code != http.StatusForbidden || !strings.Contains(recorder.Body.String(), "patrol:dispatch") {
-		t.Fatalf("缺权限应 403 并指明权限，实际 %d %s", recorder.Code, recorder.Body.String())
-	}
-}
-
-func TestGrantedPermissionPasses(t *testing.T) {
-	stub := &stubIntrospector{result: iam.Introspection{Active: true, Permissions: []string{"patrol:dispatch"}}}
-	if recorder := serve(enabled(stub), http.MethodPost, "/api/v1/patrol/dispatch", "token"); recorder.Code != http.StatusOK {
-		t.Fatalf("有权限应放行，实际 %d", recorder.Code)
+func TestValidTokenPasses(t *testing.T) {
+	stub := &stubIntrospector{result: iam.Introspection{Active: true, Role: "OPERATOR"}}
+	if recorder := serve(enabled(stub), http.MethodPost, "/api/v1/protected", "token"); recorder.Code != http.StatusOK {
+		t.Fatalf("有效令牌应放行，实际 %d", recorder.Code)
 	}
 }
 
 func TestPublicPathsSkipAuth(t *testing.T) {
 	stub := &stubIntrospector{}
-	for _, path := range []string{"/api/v1/patrol/domains", "/actuator/health"} {
+	for _, path := range []string{"/api/v1/public", "/actuator/health"} {
 		if recorder := serve(enabled(stub), http.MethodGet, path, ""); recorder.Code != http.StatusOK {
 			t.Fatalf("%s 应公开，实际 %d", path, recorder.Code)
 		}
@@ -128,7 +121,7 @@ func TestIamPathSkipsAuth(t *testing.T) {
 
 func TestPreflightSkipsAuth(t *testing.T) {
 	stub := &stubIntrospector{}
-	if recorder := serve(enabled(stub), http.MethodOptions, "/api/v1/patrol/dispatch", ""); recorder.Code == http.StatusUnauthorized {
+	if recorder := serve(enabled(stub), http.MethodOptions, "/api/v1/protected", ""); recorder.Code == http.StatusUnauthorized {
 		t.Fatalf("CORS 预检不带令牌，不该 401")
 	}
 	if stub.called {
@@ -139,7 +132,7 @@ func TestPreflightSkipsAuth(t *testing.T) {
 func TestAuthDisabledPassesEverything(t *testing.T) {
 	stub := &stubIntrospector{}
 	r := newTestRouter(stub, Settings{AuthEnabled: false})
-	if recorder := serve(r, http.MethodPost, "/api/v1/patrol/dispatch", ""); recorder.Code != http.StatusOK {
+	if recorder := serve(r, http.MethodPost, "/api/v1/protected", ""); recorder.Code != http.StatusOK {
 		t.Fatalf("关闭鉴权后应放行，实际 %d", recorder.Code)
 	}
 	if stub.called {

@@ -18,7 +18,7 @@ func TestIntrospectReturnsPermissions(t *testing.T) {
 		if string(body) != `{"token":"token-1"}` {
 			t.Fatalf("内省请求体不对: %s", body)
 		}
-		_, _ = w.Write([]byte(`{"active":true,"userId":"u1","username":"operator","role":"operator","permissions":["patrol:dispatch"]}`))
+		_, _ = w.Write([]byte(`{"active":true,"userId":"u1","username":"operator","role":"operator","permissions":["iam:users"]}`))
 	}))
 	defer server.Close()
 
@@ -26,7 +26,7 @@ func TestIntrospectReturnsPermissions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("有效令牌不应报错: %v", err)
 	}
-	if !introspection.Has("patrol:dispatch") {
+	if !introspection.Has("iam:users") {
 		t.Fatalf("权限未解析，实际 %v", introspection.Permissions)
 	}
 	if introspection.Has("platform:admin") {
