@@ -30,6 +30,20 @@ patrol:
       account: http://localhost:8083
       fund: http://localhost:8084
 
+iam:
+  auth:
+    # 鉴权开关：关闭后网关不做鉴权，仅用于本地联调；生产必须为 true。
+    enabled: ${IAM_AUTH_ENABLED:true}
+    # 不需要令牌的路径。IAM 透传路径（/api/v1/iam/**）在过滤器里单独跳过。
+    public-paths:
+      - /actuator/**
+      - /api/v1/patrol/domains
+  routes:
+    # 服务发现注册名（真源：abox/services.ttl 的 rcp:iam 个体）。
+    service: iam
+    # 兜底地址：注册中心不可用或无实例时使用。
+    endpoint: ${IAM_ENDPOINT:http://localhost:8085}
+
 management:
   endpoints:
     web:

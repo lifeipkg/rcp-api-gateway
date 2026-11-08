@@ -23,10 +23,10 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 public class PatrolDispatchService {
 
-    /** 幂等表：event_id -> 已处理的最大 version（生产为 MySQL 唯一键）。 */
+    /** 幂等表：event_id -> 已处理的最大 version（生产为 PostgreSQL 唯一键）。 */
     private final Map<String, Long> idempotentTable = new ConcurrentHashMap<>();
 
-    /** 状态机：event_id -> 已落地的处置状态序（生产为 MySQL 状态机表）。 */
+    /** 状态机：event_id -> 已落地的处置状态序（生产为 PostgreSQL 状态机表）。 */
     private final Map<String, Integer> stateMachine = new ConcurrentHashMap<>();
 
     private final PatrolClient patrolClient;

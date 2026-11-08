@@ -25,8 +25,9 @@ public class WebCorsConfig implements WebMvcConfigurer {
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/api/**")
                 .allowedOrigins(allowedOrigins)
-                .allowedMethods("GET", "POST", "OPTIONS")
-                .allowedHeaders("Content-Type")
+                // PUT：IAM 的用户更新与改密；Authorization：Bearer 令牌，必须在预检里放行
+                .allowedMethods("GET", "POST", "PUT", "OPTIONS")
+                .allowedHeaders("Content-Type", "Authorization")
                 .maxAge(3600);
     }
 }
