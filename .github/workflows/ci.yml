@@ -7,8 +7,10 @@ on:
 
 jobs:
   build:
-    uses: lifeipkg/rcp-contracts/.github/workflows/java-service.yml@main
+    # Go 模板不检出 rcp-core：它是 Java 库，本仓已不依赖。幂等、状态机搬进
+    # internal/patrol，决策序与处置映射在 internal/model，语义对端仍是
+    # rcp-ontology/ontology/tbox/decisions.ttl。
+    uses: lifeipkg/rcp-contracts/.github/workflows/go-service.yml@main
     with:
       service: api-gateway
       contract: contracts/openapi/api-gateway.yaml
-      core-ref: v1.0.0
