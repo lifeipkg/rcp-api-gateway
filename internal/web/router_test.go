@@ -174,3 +174,18 @@ func TestHealthEndpoint(t *testing.T) {
 		t.Fatalf("健康检查应 200，实际 %d", recorder.Code)
 	}
 }
+
+// IAM 透传的三种方法都必须挂上：契约里就是 GET/POST/PUT /api/v1/iam/**。
+// IAM 地址在测试里指向不可达端口，命中即 503 AUTH_UNAVAILABLE——404 说明路由没注册，
+// 401 说明鉴权中间件把透传路径也拦了（两者都违反契约）。
+func TestIamPassthroughRoutesAreMounted(t *testing.T) {
+	r := newRouter(&stubPatrol{}, &stubIntrospector{})
+	for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodPut} {
+		request := httptest.NewRequest(method, "/api/v1/iam/users/u1", strings.NewReader("{}"))
+		request.Header.Set("Content-Type", "application/json")
+		recorder := do(r, request)
+		if recorder.Code != http.StatusServiceUnavailable {
+			t.Fatalf("%s /api/v1/iam/users/u1 应命中透传（IAM 不可达 → 503），实际 %d", method, recorder.Code)
+		}
+	}
+}

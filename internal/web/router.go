@@ -39,8 +39,13 @@ func NewRouter(cfg config.Config, service *patrol.Service, introspector auth.Int
 	})
 
 	// /api/v1/iam/** 透传：网关不鉴权、不改写状态码（见 internal/auth 第 3 条硬规则）。
-	r.Any("/api/v1/iam", gin.WrapH(proxy))
-	r.Any("/api/v1/iam/*path", gin.WrapH(proxy))
+	// 逐个方法注册而不写 r.Any：契约里就是 GET/POST/PUT 三条 /api/v1/iam/**，
+	// 对表脚本按 r.<METHOD>("字面量") 抽取，r.Any 抽不到会让契约侧的透传口"看起来缺实现"。
+	// Gin 的通配是 *path，对表脚本会把 *path 归一成 ** 后与契约比较。
+	iamProxy := gin.WrapH(proxy)
+	r.GET("/api/v1/iam/*path", iamProxy)
+	r.POST("/api/v1/iam/*path", iamProxy)
+	r.PUT("/api/v1/iam/*path", iamProxy)
 
 	r.POST("/api/v1/patrol/dispatch", h.dispatch)
 	r.GET("/api/v1/patrol/domains", h.domains)
